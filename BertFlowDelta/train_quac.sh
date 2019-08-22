@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=1 python3 examples/run_quac.py \
+python3 run_quac.py \
   --bert_model bert-base-uncased \
   --do_train \
   --do_predict \

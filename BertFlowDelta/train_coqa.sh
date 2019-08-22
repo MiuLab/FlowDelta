@@ -1,10 +1,10 @@
-CUDA_VISIBLE_DEVICES=3 python3 examples/run_coqa.py \
+python3 run_coqa.py \
   --bert_model bert-base-uncased \
   --do_train \
   --do_predict \
   --do_lower_case \
-  --train_file CoQA_data/train_span.json \
-  --predict_file CoQA_data/dev_span.json \
+  --train_file CoQA_data/train.json \
+  --predict_file CoQA_data/dev.json \
   --train_batch_size 1 \
   --learning_rate 3e-5 \
   --num_train_epochs 3.0 \
