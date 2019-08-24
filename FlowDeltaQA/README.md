@@ -1,9 +1,8 @@
-# FlowQA
+# FlowDeltaQA
 
-This is our first attempt to make state-of-the-art single-turn QA models conversational.
-Feel free to build on top of our code to build an even stronger conversational QA model.
+As we only modify the Flow part in [FlowQA](https://arxiv.org/abs/1810.06683), we keep the training / testing procedure as the same to [FlowQA released code](https://github.com/momohuang/FlowQA). 
 
-For more details, please see: [FlowQA: Grasping Flow in History for Conversational Machine Comprehension](https://arxiv.org/abs/1810.06683)
+Below we copy-and-paste the README from FlowQA released code.
 
 #### Step 1:
 perform the following:
