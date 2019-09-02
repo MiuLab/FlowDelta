@@ -20,7 +20,9 @@ def normalize_answer(s):
         return ''.join(ch for ch in text if ch not in exclude)
     def lower(text):
         return text.lower()
+
     return white_space_fix(remove_articles(remove_punc(lower(s))))
+
 def f1_score(prediction, ground_truth):
     prediction_tokens = normalize_answer(prediction).split()
     ground_truth_tokens = normalize_answer(ground_truth).split()
@@ -32,6 +34,7 @@ def f1_score(prediction, ground_truth):
     recall = 1.0 * num_same / len(ground_truth_tokens)
     f1 = (2 * precision * recall) / (precision + recall)
     return f1
+    
 def handle_cannot(refs):
     num_cannot = 0
     num_spans = 0

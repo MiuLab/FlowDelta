@@ -988,15 +988,9 @@ class DialogDataLoader:
             dialog_len = all_input_ids.size(0)
 
             dialog_step = self.max_batch
-            #if self.max_batch * 2 > dialog_len and dialog_len > self.max_batch:
-            #    dialog_step = dialog_len // 2
             
             for i in range(0, dialog_len, dialog_step):
                 start, end = i, i + dialog_step
-                if end > dialog_len and not self.eval:
-                    start, end = dialog_len - dialog_step, dialog_len
-                    if start < 0:
-                        start = 0
                 input_ids = all_input_ids[start:end, :]
                 input_mask = all_input_mask[start:end, :]
                 segment_ids = all_segment_ids[start:end, :]

@@ -197,11 +197,9 @@ class BertEmbeddings(nn.Module):
         position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        if context_feature is not None:
+        if context_feature is not None: 
             context_feature = self.context_feature_embeddings(context_feature)
             embeddings = words_embeddings + position_embeddings + token_type_embeddings + context_feature
-            #embeddings = words_embeddings + position_embeddings + token_type_embeddings 
-            #embeddings = self.context_feature_embeddings(torch.cat((embeddings, context_feature), dim=2))
         else:
             embeddings = words_embeddings + position_embeddings + token_type_embeddings 
         embeddings = self.LayerNorm(embeddings)
@@ -337,8 +335,7 @@ class BertEncoder(nn.Module):
         self.use_flow = use_flow
         self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.num_hidden_layers)])
 
-        #self.flow = FlowRNN(config.hidden_size, config.hidden_size, num_layers=1, rnn_type=nn.GRU, bidir=False, residual_step=True)
-        self.flow2 = FlowRNN(config.hidden_size, config.hidden_size, num_layers=1, rnn_type=nn.GRU, bidir=False, residual_step=True)
+        self.flow = FlowRNN(config.hidden_size, config.hidden_size, num_layers=1, rnn_type=nn.GRU, bidir=False, flowdelta_step=True)
 
     def forward(self, hidden_states, attention_mask, output_all_encoded_layers=True):
         all_encoder_layers = []
@@ -351,10 +348,8 @@ class BertEncoder(nn.Module):
         for l_idx, layer_module in enumerate(self.layer):
             flow_out = None
             if self.use_flow:
-                #if l_idx == 0:
-                #    flow_out = flow_op(hidden_states, self.flow)
-                if l_idx == 11:
-                    flow_out = flow_op(hidden_states, self.flow2)
+                if l_idx == 11: # bert_base has 12 layers
+                    flow_out = flow_op(hidden_states, self.flow)
             hidden_states = layer_module(hidden_states, attention_mask, flow_out)
             
             if output_all_encoded_layers:
@@ -949,7 +944,7 @@ class BertForQuestionAnswering(PreTrainedBertModel):
         print('class_num:', class_num)
         print('prv_ctx:', prv_ctx)
         print('Use Flow:', use_flow)
-        self.class_num = class_num
+        self.class_num = class_num # quac: 1 class (answerable), coqa: 3 classes (yes, no, answerable)
         self.use_flow = use_flow
         self.bert = BertModel(config, prv_ctx=prv_ctx, use_flow=use_flow)
         # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
@@ -957,7 +952,7 @@ class BertForQuestionAnswering(PreTrainedBertModel):
 
         if self.use_flow:
             self.flow = FlowRNN(config.hidden_size, config.hidden_size, num_layers=1, rnn_type=nn.GRU, bidir=False,
-                            residual_step=True)
+                            flowdelta_step=True)
             self.pool = nn.Linear(config.hidden_size * 2, config.hidden_size * 2)
             self.tanh = nn.Tanh()
 
@@ -978,13 +973,11 @@ class BertForQuestionAnswering(PreTrainedBertModel):
             flow_out = flow_out.permute(1, 0, 2)
             sequence_output = torch.cat((sequence_output, flow_out), dim=2)
         
-        # deal with first token
-        if self.class_num < 2:
+        # seperated into two cases (quac, coqa) for experiments
+        if self.class_num < 2: # quac
             pooled_output = sequence_output[:, 0, :]
-            #pooled_output = self.tanh(self.pool(sequence_output[:, 0]))
-        else:
+        else: # coqa
             pooled_output = sequence_output[:, 0, :]
-            #pooled_output = self.tanh(self.pool(sequence_output[:, 0]))
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -1008,21 +1001,23 @@ class BertForQuestionAnswering(PreTrainedBertModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             
+            #TODO: the weight of class_loss is not well-tuned. maybe it does not matter?
             if self.class_num < 2: # quac
                 class_loss_fct = BCEWithLogitsLoss()
                 class_loss = class_loss_fct(class_logits.squeeze(), is_impossible.squeeze().float())
-                #total_loss = (start_loss + end_loss) / 2 + class_loss / 5
                 total_loss = (start_loss + end_loss)/2 + class_loss / 3
             else: # coqa
                 class_loss_fct = CrossEntropyLoss(ignore_index=3)
                 class_loss = class_loss_fct(class_logits, is_impossible)
-                total_loss = (start_loss + end_loss + class_loss)/3
-                #total_loss = (start_loss + end_loss)/2 + class_loss / 3
+                total_loss = (start_loss + end_loss + class_loss) / 3
             return total_loss
         else:
             return start_logits, end_logits, class_logits
 
 class FlowRNN(nn.Module):
+    '''
+    FlowRNN + flowdelta
+    '''
     def __init__(self, 
                  input_size, 
                  hidden_size, 
@@ -1033,10 +1028,7 @@ class FlowRNN(nn.Module):
                  add_feat=0, 
                  dialog_flow=False, 
                  bidir=True,
-                 residual_step=False,
-                 cof=False,
-                 double_flow=False,
-                 input_residual=False,
+                 flowdelta_step=False,
                  my_dropout_p=0.3):
         super(FlowRNN, self).__init__()
         self.input_size = input_size
@@ -1045,10 +1037,7 @@ class FlowRNN(nn.Module):
         self.do_residual = do_residual
         self.dialog_flow = dialog_flow
         self.hidden_size = hidden_size
-        self.residual_step = residual_step
-        self.cof = cof
-        self.double_flow = double_flow
-        self.input_residual = input_residual
+        self.flowdelta_step = flowdelta_step
         self.my_dropout_p = my_dropout_p
 
         self.contexts = nn.ModuleList()
@@ -1059,18 +1048,8 @@ class FlowRNN(nn.Module):
             if self.dialog_flow == True:
                 input_size += 2 * hidden_size
 
-            if self.residual_step:
-                #self.bilinear = BilinearFlowAttn(input_size, input_size)
-                #input_size += self.input_size
+            if self.flowdelta_step:
                 input_size += hidden_size 
-                #self.res_linear = nn.Linear(input_size, hidden_size)
-            if self.cof:
-                input_size += self.input_size 
-            if self.input_residual:
-                input_size += self.input_size
-            attn_size = self.input_size
-            #self.contexts.append(FlowAttn(attn_size, attn_size, attn_size, tight_weight=True))
-            print('attn_size: ', attn_size)
 
             print('Flow input_size:', input_size)
             self.rnns.append(rnn_type(input_size, hidden_size, num_layers=1,bidirectional=bidir))
@@ -1104,51 +1083,20 @@ class FlowRNN(nn.Module):
             residual_outputs = []
             hidden = None
             hidden_size = rnn_input.size(2)
-            padding = torch.zeros(rnn_input.size(1), rnn_input.size(2)).cuda(non_blocking=True)
             residual = torch.zeros(1, rnn_input.size(1), self.hidden_size).cuda(non_blocking=True)
 
-            zero_pad = torch.zeros(1, rnn_input.size(1), self.hidden_size).cuda(non_blocking=True)
-            res_hiddens = []
             last_hidden = None
 
-            h_1, h_2 = None, None
             for qa_idx in range(x.size(0)):
                 # residual: [1, bsz * context_length, flow_hidden_state]
-                if self.cof:
-                    if qa_idx > 0:
-                        x2 = torch.cat((rnn_input[qa_idx - 1, :, :], rnn_input[qa_idx, :, :]) , dim=1)
-                        x3 = rnn_input[qa_idx, :, :]
-                        #last = rnn_input[qa_idx - 1, :, :]
-                        #cur = rnn_input[qa_idx, :, :]
-                    else:
-                        x2 = torch.cat((rnn_input[qa_idx, :, :], rnn_input[qa_idx, :, :]), dim=1)
-                        x3 = rnn_input[qa_idx, :, :]
-                        #last = rnn_input[qa_idx, :, :]
-                        #cur = rnn_input[qa_idx, :, :]
-                    context = self.contexts[i](x2.unsqueeze(0), 
-                                            x2.unsqueeze(0), 
-                                            x3.unsqueeze(0))
-                    #context = (cur - last).unsqueeze(0)
-                    
+               
                 residual_outputs.append(residual)
                 cur_input = rnn_input[qa_idx, :, :].unsqueeze(0)
-                if self.double_flow:
-                    rnn_output_1, h_1 = self.rnns_1[i](torch.cat((residual, cur_input), dim=2), h_1)
-                    rnn_output_2, h_2 = self.rnns_2[i](torch.cat((context, cur_input), dim=2), h_2)
-                    h = h_1
-                else:
-                    if self.residual_step:
-                        cur_input = torch.cat((residual, cur_input), dim=2)
-                    if self.cof:
-                        cur_input = torch.cat((context, cur_input), dim=2)
-                    
-                    if self.input_residual:
-                        if qa_idx > 0:
-                            input_residual = rnn_input[qa_idx, :, :] - rnn_input[qa_idx - 1, :, :]
-                        else:
-                            input_residual = rnn_input[qa_idx, :, :]
-                        cur_input = torch.cat((input_residual.unsqueeze(0), cur_input), dim=2)
-                    rnn_output, h = self.rnns[i](cur_input, hidden)
+            
+                if self.flowdelta_step:
+                    cur_input = torch.cat((residual, cur_input), dim=2)
+                 
+                rnn_output, h = self.rnns[i](cur_input, hidden)
 
                 if hidden is not None:
                     residual = h - hidden
@@ -1156,12 +1104,8 @@ class FlowRNN(nn.Module):
                     residual = h
                 last_hidden = hidden
                 hidden = h
-                res_hiddens.append(hidden)
-
-                if self.double_flow:
-                    rnn_outputs.append(torch.cat((rnn_output_1, rnn_output_2), dim=-1))
-                else:
-                    rnn_outputs.append(rnn_output)
+              
+                rnn_outputs.append(rnn_output)
             rnn_output = torch.cat(rnn_outputs, dim=0)
             residual_output = torch.cat(residual_outputs, dim=0)
             

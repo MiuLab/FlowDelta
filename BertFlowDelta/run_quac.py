@@ -808,19 +808,24 @@ class DialogDataLoader:
         self.eval = eval_mode
         self.prv_ctx = prv_ctx
         
-        self.max_batch = 12 if not self.eval else 100
-        # beacause we limit the max number of dialog
-        num_examples = 0
+        # TODO: change max_batch into argument
+        self.max_batch = 4 if not self.eval else 100 # control how many qa pairs in one batch
+        
+        num_examples = 0 # count how many batches in the data (for optimimzer learning rate schedule)
         for idx in range(len(self.input_ids)):
             all_input_ids = torch.tensor(self.input_ids[idx], dtype=torch.long)
             dialog_len = all_input_ids.size(0)
             for i in range(0, dialog_len, self.max_batch):
                 num_examples += 1
         self.num_examples = num_examples
+    
     def __len__(self):
         return self.num_examples
     
     def gen_context_feature(self, input_ids, start_positions, end_positions, is_impossibles):
+        '''
+        Generate feature about "is this context word a answer in last dialog turns?"
+        '''
         context_feature = torch.zeros((input_ids.size(0), input_ids.size(1), 2 * self.prv_ctx), dtype=torch.float)
         # start/end_position: (batch, 1)
         for b_idx in range(start_positions.size(0)):
@@ -882,6 +887,9 @@ class DialogDataLoader:
 
 
 def make_dialog_tensors(features, is_eval=False):
+    '''
+    Collect Q/A pairs in same dialog together for batching.
+    '''
     all_input_ids = []
     all_input_mask = []
     all_segment_ids = []
@@ -891,13 +899,13 @@ def make_dialog_tensors(features, is_eval=False):
     all_input_ids = []
     all_example_indexs = []
     input_ids, input_mask, segment_ids, start_positions, end_positions, is_impossibles = [], [], [], [], [], []
-    example_indexs = []
+    example_indexs = [] # for original pytorch_pretrained_bert prediction implementation
 
     example_index = np.arange(len(features))
     
     last_dialog_id = None
     for f_idx, f in enumerate(features):
-        if last_dialog_id is None or f.dialog_id != last_dialog_id:
+        if last_dialog_id is None or f.dialog_id != last_dialog_id: # different dialog
             if last_dialog_id is not None:
                 all_input_ids.append(input_ids)
                 all_input_mask.append(input_mask)
