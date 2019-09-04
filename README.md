@@ -1,4 +1,4 @@
-# FlowDelta: Modeling Flow Information Gain in Reasoning for Conversational Machine Comprehension (Under Construction)
+# FlowDelta: Modeling Flow Information Gain in Reasoning for Conversational Machine Comprehension 
 *An implementation of the [FlowDelta: Modeling Flow Information Gain in Reasoning for Conversational Machine Comprehension](https://arxiv.org/abs/1908.05117)*
 
 CodaLab pages submitted to public leaderboard:
