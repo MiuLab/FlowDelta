@@ -739,7 +739,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
 
         assert len(nbest_json) >= 1
         if not best_non_null_entry:
-            score_diff = 10 
+            score_diff = 10
         else:
             # predict "" iff the null score - the score of best non-null > threshold
             score_diff = score_null - best_non_null_entry.start_logit - (
@@ -757,7 +757,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
         else:
             all_predictions[example.qas_id] = best_non_null_entry.text
         all_nbest_json[example.qas_id] = nbest_json
-        scores_diff_json[example.qas_id] = (score_diff, final_text, best_non_null_entry.text)
+        scores_diff_json[example.qas_id] = (score_diff, final_text, all_predictions[example.qas_id])
 
     if not ignore_write:
         with open(output_prediction_file, "w") as writer:
