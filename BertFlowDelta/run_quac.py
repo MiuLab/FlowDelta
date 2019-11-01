@@ -809,7 +809,7 @@ class DialogDataLoader:
         self.prv_ctx = prv_ctx
         
         # TODO: change max_batch into argument
-        self.max_batch = 4 if not self.eval else 100 # control how many qa pairs in one batch
+        self.max_batch = 12 if not self.eval else 100 # control how many qa pairs in one batch
         
         num_examples = 0 # count how many batches in the data (for optimimzer learning rate schedule)
         for idx in range(len(self.input_ids)):
