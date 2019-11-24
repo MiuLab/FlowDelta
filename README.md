@@ -14,10 +14,11 @@ As there are large differences between the usage of FlowDeltaQA and BertFlowDelt
 Main paper to be cited
 
 ```
-@article{yeh2019flowdelta,
+@inproceedings{yeh2019flowdelta,
   title={FlowDelta: Modeling Flow Information Gain in Reasoning for Conversational Machine Comprehension},
   author={Yeh, Yi-Ting and Chen, Yun-Nung},
-  journal={arXiv preprint arXiv:1908.05117},
+  booktitle={Proceedings of the 2nd Workshop on Machine Reading for Question Answering},
+  pages={86--90},
   year={2019}
 }
 ```
