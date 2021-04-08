@@ -103,7 +103,8 @@ class InputFeatures(object):
                  start_position=None,
                  end_position=None,
                  is_impossible=None,
-                 dialog_id=None):
+                 dialog_id=None,
+                 chunk_id=None):
         self.unique_id = unique_id
         self.example_index = example_index
         self.doc_span_index = doc_span_index
@@ -117,6 +118,7 @@ class InputFeatures(object):
         self.end_position = end_position
         self.is_impossible = is_impossible
         self.dialog_id = dialog_id
+        self.chunk_id = chunk_id
 
 def read_quac_examples(input_file, is_training, max_question_len=60):
     """Read a QuAC json file into a list of QuACExample."""
@@ -274,6 +276,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 break
             start_offset += min(length, doc_stride)
 
+        chunk_id = 0
         for (doc_span_index, doc_span) in enumerate(doc_spans):
             tokens = []
             token_to_orig_map = {}
@@ -377,8 +380,10 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     start_position=start_position,
                     end_position=end_position,
                     is_impossible=example.is_impossible,
-                    dialog_id=example.dialog_id))
+                    dialog_id=example.dialog_id,
+                    chunk_id=chunk_id))
             unique_id += 1
+            chunk_id += 1
 
     return features
 
@@ -898,7 +903,9 @@ def make_dialog_tensors(features, is_eval=False):
     all_is_impossibles = []
     all_input_ids = []
     all_example_indexs = []
+
     input_ids, input_mask, segment_ids, start_positions, end_positions, is_impossibles = [], [], [], [], [], []
+    chunk_ids = []
     example_indexs = [] # for original pytorch_pretrained_bert prediction implementation
 
     example_index = np.arange(len(features))
@@ -907,16 +914,34 @@ def make_dialog_tensors(features, is_eval=False):
     for f_idx, f in enumerate(features):
         if last_dialog_id is None or f.dialog_id != last_dialog_id: # different dialog
             if last_dialog_id is not None:
-                all_input_ids.append(input_ids)
-                all_input_mask.append(input_mask)
-                all_segment_ids.append(segment_ids)
-                all_start_positions.append(start_positions)
-                all_end_positions.append(end_positions)
-                all_is_impossibles.append(is_impossibles)
-                
-                all_example_indexs.append(example_indexs)
+                unique_chunk_ids = set(chunk_ids)
+                for unique_chunk_id in unique_chunk_ids: 
+                    chunk_input_ids, chunk_input_mask, chunk_segment_ids, chunk_start_positions, chunk_end_positions, chunk_is_impossibles = [], [], [], [], [], []
+                    chunk_example_indexs = []
+
+                    for idx, chunk_id in enumerate(chunk_ids):
+                        if chunk_id == unique_chunk_id:
+                            chunk_input_ids.append(input_ids[idx])
+                            chunk_input_mask.append(input_mask[idx])
+                            chunk_segment_ids.append(segment_ids[idx])
+                            chunk_start_positions.append(start_positions[idx])
+                            chunk_end_positions.append(end_positions[idx])
+                            chunk_is_impossibles.append(is_impossibles[idx])
+                            chunk_example_indexs.append(example_indexs[idx])
+
+
+                    all_input_ids.append(chunk_input_ids)
+                    all_input_mask.append(chunk_input_mask)
+                    all_segment_ids.append(chunk_segment_ids)
+                    all_start_positions.append(chunk_start_positions)
+                    all_end_positions.append(chunk_end_positions)
+                    all_is_impossibles.append(chunk_is_impossibles)
+                    
+                    all_example_indexs.append(chunk_example_indexs)
             input_ids, input_mask, segment_ids, start_positions, end_positions, is_impossibles = [], [], [], [], [], []
+            chunk_ids = []
             example_indexs = []
+
         input_ids.append(f.input_ids)
         input_mask.append(f.input_mask)
         segment_ids.append(f.segment_ids)
@@ -924,10 +949,10 @@ def make_dialog_tensors(features, is_eval=False):
         end_positions.append(f.end_position)
         is_impossibles.append(int(f.is_impossible))
         
+        chunk_ids.append(f.chunk_id)
         example_indexs.append(example_index[f_idx])
         
         last_dialog_id = f.dialog_id
-
     all_input_ids.append(input_ids)
     all_input_mask.append(input_mask)
     all_segment_ids.append(segment_ids)
